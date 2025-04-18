@@ -1,0 +1,65 @@
+CREATE MODEL `vector_encoding`
+INPUT (input STRING)
+OUTPUT (vector ARRAY<FLOAT>)
+WITH(
+  'TASK' = 'embedding',
+  'PROVIDER' = 'openai',
+  'OPENAI.CONNECTION' = 'openai-embedding-connection'
+);
+
+CREATE MODEL product_description_model
+INPUT(message STRING)
+OUTPUT(response STRING)
+COMMENT 'Prepares the product data to work well for search.'
+WITH (
+  'provider' = 'openai',
+  'task' = 'text_generation',
+  'openai.connection'='openai-connection',
+  'openai.model_version' = 'gpt-4',
+  'openai.system_prompt' = 'You are a helpful AI assistant that specializes in writing product descriptions
+   based on structured data. Your goal is to generate clear, natural, and informative summaries that capture
+   a product’s core attributes, features, and value propositions.
+
+   The descriptions should be written in fluent, human-like language with an emphasis on semantic richness to
+   support vector search and retrieval. Avoid lists or bullet points—write a short paragraph (2–5 sentences)
+   that flows naturally.
+
+   Do not repeat field names. Instead, infer and summarize meaning where appropriate. Be concise, avoid marketing
+   fluff, and focus on factual details. You may reorder, rephrase, or omit information that isn’t useful for semantic
+   understanding. If the data contains irrelevant or noisy fields (e.g., internal codes, redundant values), ignore them.'
+);
+
+INSERT INTO product_as_documents
+SELECT
+  CAST(CAST(ID AS STRING) AS BYTES) AS `key`,
+  ID,
+  product_summary.response
+FROM enriched_running_products
+CROSS JOIN LATERAL TABLE(
+  ml_predict(
+    'product_description_model',
+    CONCAT_WS(
+      ' ',
+      'Name: ', `NAME`,
+      'Rating: ', CAST(`RATINGS` AS STRING),
+      'Price: ', `ACTUAL_PRICE`,
+      'About: ', REGEXP_REPLACE(CAST(about_this_item AS STRING), '\\[|\\]', ''), '\n',
+      'Product Description: ', product_description, '\n',
+      'Product Details: ', REGEXP_REPLACE(CAST(product_details AS STRING), '\\{|\}', '')
+    )
+  )
+) AS product_summary;
+
+INSERT INTO product_embeddings
+SELECT
+  CAST(CAST(id AS STRING) AS BYTES) AS `key`,
+  embedding,
+  id,
+  product_summary
+FROM product_as_documents,
+LATERAL TABLE (
+  ml_predict(
+    'vector_encoding',
+    product_summary
+  )
+) AS T(embedding);

@@ -1,0 +1,9 @@
+fastapi
+confluent_kafka
+uvicorn
+python-dotenv
+pymongo
+httpx
+beautifulsoup4
+lxml
+motor
