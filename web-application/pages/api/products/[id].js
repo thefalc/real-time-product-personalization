@@ -25,7 +25,7 @@ async function saveClickData(req, id, sessionId) {
   req.session.recentClicks.unshift(parseInt(id, 10));
 
   // Keep only the last 10
-  req.session.recentClicks = req.session.recentClicks.slice(0, 10);
+  req.session.recentClicks = req.session.recentClicks.slice(0, 4);
 
   console.log(req.session.recentClicks);
 
